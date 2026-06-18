@@ -1,0 +1,2 @@
+pyftpdlib>=1.5.7
+bcrypt>=4.0.0
