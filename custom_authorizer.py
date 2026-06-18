@@ -17,7 +17,7 @@ class CustomAuthorizer:
     @staticmethod
     def sanitize_filename(filename: str) -> str:
         filename = re.sub(r"\.\./|\.\.\\", "", filename)
-        filename = re.sub(r"[/\\]+", os.sep, filename)
+        filename = re.sub(r"[/\\]+", lambda m: os.sep, filename)
         return filename.strip(os.sep)
 
     @staticmethod
@@ -75,6 +75,19 @@ class CustomAuthorizer:
 
     @staticmethod
     def _map_perm_to_flag(perm):
+        SINGLE_LETTER_MAP = {
+            'e': config.PERM_READ,
+            'l': config.PERM_READ,
+            'r': config.PERM_READ,
+            'a': config.PERM_WRITE,
+            'd': config.PERM_DELETE,
+            'f': config.PERM_DELETE,
+            'w': config.PERM_WRITE,
+            'm': config.PERM_WRITE,
+            'M': config.PERM_ADMIN,
+        }
+        if len(perm) == 1 and perm in SINGLE_LETTER_MAP:
+            return SINGLE_LETTER_MAP[perm]
         for flag, commands in config.PERM_MAP.items():
             if perm in commands:
                 return flag
@@ -112,5 +125,5 @@ class CustomAuthorizer:
     def impersonate_user(self, username, password):
         pass
 
-    def terminate_user(self, username):
+    def terminate_impersonation(self, username):
         pass

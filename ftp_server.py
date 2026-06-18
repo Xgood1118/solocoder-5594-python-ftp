@@ -26,6 +26,23 @@ class CustomFTPHandler(FTPHandler):
         self._transfer_id = None
         self._resume_offset = 0
 
+        self.proto_cmds["SITE QUOTA"] = {
+            "perm": None, "auth": True, "arg": True,
+            "help": "Syntax: SITE QUOTA <SP> username (query user quota).",
+        }
+        self.proto_cmds["SITE INFO"] = {
+            "perm": None, "auth": True, "arg": None,
+            "help": "Syntax: SITE INFO (show server info).",
+        }
+        self.proto_cmds["SITE CHPERM"] = {
+            "perm": None, "auth": True, "arg": True,
+            "help": "Syntax: SITE CHPERM <SP> username permissions (change user permissions).",
+        }
+        self.proto_cmds["SITE CHQUOTA"] = {
+            "perm": None, "auth": True, "arg": True,
+            "help": "Syntax: SITE CHQUOTA <SP> username quota (change user quota).",
+        }
+
     def on_connect(self):
         self._audit.log("ANONYMOUS", self.remote_ip, "CONNECT")
 
@@ -254,39 +271,21 @@ class CustomFTPHandler(FTPHandler):
             return
         super().ftp_REST(offset)
 
-    def ftp_SITE(self, line):
+    def ftp_SITE_QUOTA(self, arg):
         username = getattr(self, "username", None)
         if not username:
             self.respond("530 Not logged in.")
             return
 
         if not self.authorizer.has_perm(username, "SITE"):
-            self._audit.log(username, self.remote_ip, "SITE", line, "denied", "550")
+            self._audit.log(username, self.remote_ip, "SITE_QUOTA", arg, "denied", "550")
             self.respond("550 Permission denied.")
             return
 
-        parts = line.strip().split()
-        if not parts:
-            self.respond("500 Unknown SITE command.")
-            return
-
-        cmd = parts[0].upper()
-        if cmd == "QUOTA":
-            self._site_quota(username, parts[1:])
-        elif cmd == "INFO":
-            self._site_info(username)
-        elif cmd == "CHPERM":
-            self._site_chperm(username, parts[1:])
-        elif cmd == "CHQUOTA":
-            self._site_chquota(username, parts[1:])
-        else:
-            self.respond("500 Unknown SITE command.")
-
-    def _site_quota(self, username, args):
-        if len(args) < 1:
+        if not arg:
             self.respond("500 Usage: SITE QUOTA <username>")
             return
-        target_user = args[0]
+        target_user = arg.strip()
         user = self._user_manager.get_user(target_user)
         if user is None:
             self.respond("550 User not found.")
@@ -299,20 +298,45 @@ class CustomFTPHandler(FTPHandler):
             f"({usage / (1024*1024):.2f}MB/{quota / (1024*1024):.2f}MB)"
         )
 
-    def _site_info(self, username):
+    def ftp_SITE_INFO(self, arg):
+        username = getattr(self, "username", None)
+        if not username:
+            self.respond("530 Not logged in.")
+            return
+
+        if not self.authorizer.has_perm(username, "SITE"):
+            self._audit.log(username, self.remote_ip, "SITE_INFO", "", "denied", "550")
+            self.respond("550 Permission denied.")
+            return
+
         import sys
-        active = sum(1 for h in self.server.handler.__subclasses__() if hasattr(h, "_connections"))
+        active_count = 0
+        try:
+            active_count = len(getattr(self.server, 'connections', getattr(self.server, '_connections', [])))
+        except Exception:
+            active_count = 0
         info_lines = [
             "200-Server Info:",
             f"200-  Version: 1.0.0",
             f"200-  Python: {sys.version.split()[0]}",
-            f"200-  Active connections: {len(self.server._connections)}",
+            f"200-  Active connections: {active_count}",
             f"200-  Registered users: {len(self._user_manager.list_users())}",
         ]
         self._audit.log(username, self.remote_ip, "SITE_INFO", "", "success")
         self.respond("\r\n".join(info_lines) + "\r\n200 End.")
 
-    def _site_chperm(self, username, args):
+    def ftp_SITE_CHPERM(self, arg):
+        username = getattr(self, "username", None)
+        if not username:
+            self.respond("530 Not logged in.")
+            return
+
+        if not self.authorizer.has_perm(username, "SITE"):
+            self._audit.log(username, self.remote_ip, "SITE_CHPERM", arg, "denied", "550")
+            self.respond("550 Permission denied.")
+            return
+
+        args = arg.strip().split()
         if len(args) < 2:
             self.respond("500 Usage: SITE CHPERM <username> <permissions>")
             return
@@ -331,7 +355,18 @@ class CustomFTPHandler(FTPHandler):
         else:
             self.respond("550 User not found.")
 
-    def _site_chquota(self, username, args):
+    def ftp_SITE_CHQUOTA(self, arg):
+        username = getattr(self, "username", None)
+        if not username:
+            self.respond("530 Not logged in.")
+            return
+
+        if not self.authorizer.has_perm(username, "SITE"):
+            self._audit.log(username, self.remote_ip, "SITE_CHQUOTA", arg, "denied", "550")
+            self.respond("550 Permission denied.")
+            return
+
+        args = arg.strip().split()
         if len(args) < 2:
             self.respond("500 Usage: SITE CHQUOTA <username> <quota>")
             return
